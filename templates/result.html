@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Result</h2>
+<p><strong>Quiz:</strong> {{ attempt.quiz.title }}</p>
+<p><strong>Score:</strong> {{ attempt.score }}</p>
+<p><a href="{{ url_for('review_attempt', attempt_id=attempt.id) }}">Review all questions</a></p>
+<p><a href="{{ url_for('index') }}">Back to Dashboard</a></p>
+{% endblock %}

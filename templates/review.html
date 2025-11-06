@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Review: {{ attempt.quiz.title }}</h2>
+<p><strong>Score:</strong> {{ attempt.score }}</p>
+{% for a in answers %}
+  {% set q = a.question %}
+  <article class="{% if a.is_correct %}ok{% else %}bad{% endif %}">
+    <details open>
+      <summary><strong>Q{{ loop.index }}.</strong> {{ q.text }}</summary>
+      <div style="margin-left:1rem">
+        <p>A) {{ q.option_a }}</p>
+        <p>B) {{ q.option_b }}</p>
+        <p>C) {{ q.option_c }}</p>
+        <p>D) {{ q.option_d }}</p>
+        <p><strong>Your answer:</strong> {{ a.selected_option or '—' }} &nbsp; | &nbsp; <strong>Correct:</strong> {{ q.correct_option }}</p>
+        <small class="badge">{{ q.subject.name if q.subject else 'General' }}{% if q.chapter %} • {{ q.chapter.name }}{% endif %}</small>
+      </div>
+    </details>
+  </article>
+{% endfor %}
+<p><a href="{{ url_for('index') }}">Back</a></p>
+{% endblock %}
