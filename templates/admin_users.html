@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% block content %}
+<h2>All Users ({{ total }})</h2>
+<table>
+<thead><tr><th>ID</th><th>Username</th><th>Role</th><th>Actions</th></tr></thead>
+<tbody>
+{% for u in users %}
+<tr>
+  <td>{{ u.id }}</td>
+  <td>{{ u.username }}</td>
+  <td>{{ u.role }}</td>
+  <td>
+    {% if u.id != current_user.id %}
+    <form method="post" action="{{ url_for('admin_delete_user', user_id=u.id) }}" onsubmit="return confirm('Delete user {{ u.username }}? This will remove their attempts as well.');">
+      <button type="submit">Delete</button>
+    </form>
+    {% else %}—{% endif %}
+  </td>
+</tr>
+{% endfor %}
+</tbody></table>
+{% endblock %}

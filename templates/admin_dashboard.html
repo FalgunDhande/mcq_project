@@ -20,16 +20,14 @@
 <label>Marks per question <input name="marks" value="1"></label></div>
 <button type="submit">Create Quiz</button></form>
 
-<h3>Upload Questions</h3>
+<h3>Upload Questions (Bulk)</h3>
 <form method="post" enctype="multipart/form-data" action="{{ url_for('admin_upload_questions') }}">
 <div class="grid"><label>Quiz <select name="quiz_id" required>{% for q in quizzes %}<option value="{{ q.id }}">{{ q.title }}</option>{% endfor %}</select></label>
 <label>File (CSV / XLSX / PDF) <input type="file" name="file" required></label></div>
 <small>Optional columns: <code>subject, chapter</code></small>
 <button type="submit">Upload</button></form>
 
-<h3>Assign Quiz to User</h3>
-<form method="post" action="{{ url_for('admin_assign_quiz') }}">
-<div class="grid"><label>User <select name="user_id">{% for u in users %}<option value="{{ u.id }}">{{ u.username }} ({{ u.role }})</option>{% endfor %}</select></label>
-<label>Quiz <select name="quiz_id">{% for q in quizzes %}<option value="{{ q.id }}">{{ q.title }}</option>{% endfor %}</select></label></div>
-<button type="submit">Assign</button></form>
+<h3>Recent Attempts</h3>
+<table><thead><tr><th>User</th><th>Quiz</th><th>Score</th><th>When</th></tr></thead>
+<tbody>{% for a in recent_attempts %}<tr><td>{{ a.user.username }}</td><td>{{ a.quiz.title }}</td><td>{{ a.score }}</td><td>{{ a.submitted_at or a.started_at }}</td></tr>{% endfor %}</tbody></table>
 {% endblock %}

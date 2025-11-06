@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% block content %}
+<h2>Add MCQ Manually</h2>
+<form method="post">
+<div class="grid">
+  <label>Quiz
+    <select name="quiz_id" required>
+      {% for q in quizzes %}<option value="{{ q.id }}">{{ q.title }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Subject (new or existing) <input name="subject" placeholder="e.g., SQL"></label>
+  <label>Topic (Chapter) <input name="chapter" placeholder="e.g., Joins"></label>
+</div>
+<label>Question text <textarea name="text" required></textarea></label>
+<div class="grid">
+  <label>A <input name="A" required></label>
+  <label>B <input name="B" required></label>
+  <label>C <input name="C" required></label>
+  <label>D <input name="D" required></label>
+</div>
+<label>Correct option (A/B/C/D) <input name="correct" required></label>
+<button type="submit">Add Question</button>
+</form>
+{% endblock %}

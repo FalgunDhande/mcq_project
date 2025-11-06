@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: mcq-quiz-advanced
+    name: mcq-quiz-admin-plus
     runtime: python
     plan: free
     autoDeploy: true

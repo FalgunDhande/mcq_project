@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% block content %}
+<h2>Subjects</h2>
+<ul>
+{% for s in subjects %}
+  <li><a href="{{ url_for('admin_subject_detail', subject_id=s.id) }}">{{ s.name }}</a></li>
+{% endfor %}
+</ul>
+{% endblock %}

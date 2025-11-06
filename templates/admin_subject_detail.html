@@ -1,0 +1,26 @@
+{% extends "base.html" %}{% block content %}
+<h2>Subject: {{ subject.name }}</h2>
+
+<form method="post">
+  <label>Add Topic (Chapter) <input name="chapter" placeholder="New topic name"></label>
+  <button type="submit">Add Topic</button>
+</form>
+
+<h3>Topics</h3>
+<ul>
+  <li><a href="{{ url_for('admin_subject_detail', subject_id=subject.id) }}">All</a></li>
+  {% for c in chapters %}
+    <li><a href="{{ url_for('admin_subject_detail', subject_id=subject.id, chapter_id=c.id) }}">{{ c.name }}</a></li>
+  {% endfor %}
+</ul>
+
+<h3>Questions{% if chapter_id %} in selected topic{% endif %}</h3>
+<table>
+  <thead><tr><th>ID</th><th>Question</th><th>Correct</th><th>Topic</th></tr></thead>
+  <tbody>
+    {% for q in questions %}
+      <tr><td>{{ q.id }}</td><td>{{ q.text }}</td><td>{{ q.correct_option }}</td><td>{{ q.chapter.name if q.chapter else '-' }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

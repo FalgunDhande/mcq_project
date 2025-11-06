@@ -7,7 +7,10 @@
 </head><body>
 <nav class="container-fluid"><ul><li><strong>MCQ Quiz</strong></li></ul><ul>
 {% if current_user.is_authenticated %}{% if current_user.role=='admin' %}
+<li><a href="{{ url_for('admin_users') }}">Users</a></li>
 <li><a href="{{ url_for('admin_questions') }}">Question Bank</a></li>
+<li><a href="{{ url_for('admin_new_question') }}">Add MCQ</a></li>
+<li><a href="{{ url_for('admin_subjects') }}">Subjects/Topics</a></li>
 <li><a href="{{ url_for('export_attempts') }}">Export Attempts</a></li>
 {% endif %}<li><a href="/">Dashboard</a></li><li><a href="{{ url_for('logout') }}">Logout</a></li>
 {% else %}<li><a href="{{ url_for('login') }}">Login</a></li>{% endif %}

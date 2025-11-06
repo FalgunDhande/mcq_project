@@ -13,7 +13,6 @@ os.makedirs(app.instance_path, exist_ok=True)
 
 # Use Postgres on Render if present, else SQLite for local
 db_url = os.environ.get('DATABASE_URL')
-# Normalize for SQLAlchemy + psycopg3
 if db_url:
     if db_url.startswith('postgres://'):
         db_url = db_url.replace('postgres://', 'postgresql+psycopg://', 1)
@@ -44,7 +43,7 @@ class Subject(db.Model):
     chapters = db.relationship('Chapter', backref='subject', lazy=True)
     questions = db.relationship('Question', backref='subject', lazy=True)
 
-class Chapter(db.Model):
+class Chapter(db.Model):  # Topic
     id = db.Column(db.Integer, primary_key=True)
     subject_id = db.Column(db.Integer, db.ForeignKey('subject.id'), nullable=False)
     name = db.Column(db.String(120), nullable=False)
@@ -160,6 +159,35 @@ def index():
     attempts = Attempt.query.filter_by(user_id=current_user.id).order_by(Attempt.started_at.desc()).all()
     return render_template('user_dashboard.html', assignments=assignments, attempts=attempts)
 
+# ---------- Admin: manage users (list + delete) ----------
+@app.route('/admin/users')
+@login_required
+def admin_users():
+    if current_user.role != 'admin':
+        return redirect(url_for('index'))
+    users = User.query.order_by(User.username.asc()).all()
+    return render_template('admin_users.html', users=users, total=len(users))
+
+@app.route('/admin/users/delete/<int:user_id>', methods=['POST'])
+@login_required
+def admin_delete_user(user_id):
+    if current_user.role != 'admin':
+        return redirect(url_for('index'))
+    if current_user.id == user_id:
+        flash("You can't delete yourself.", "error")
+        return redirect(url_for('admin_users'))
+    u = db.session.get(User, user_id)
+    if not u:
+        flash('User not found','error'); return redirect(url_for('admin_users'))
+    # Cascade manual: delete attempt answers -> attempts -> assignments -> user
+    AttemptAnswer.query.filter(AttemptAnswer.attempt_id.in_(db.session.query(Attempt.id).filter_by(user_id=u.id))).delete(synchronize_session=False)
+    Attempt.query.filter_by(user_id=u.id).delete(synchronize_session=False)
+    Assignment.query.filter_by(user_id=u.id).delete(synchronize_session=False)
+    db.session.delete(u)
+    db.session.commit()
+    flash('User deleted','success')
+    return redirect(url_for('admin_users'))
+
 # ---------- Admin: create user ----------
 @app.route('/admin/create_user', methods=['POST'])
 @login_required
@@ -216,7 +244,7 @@ def admin_assign_quiz():
     db.session.add(a); db.session.commit()
     flash('Assigned successfully','success'); return redirect(url_for('index'))
 
-# ---------- Admin: upload questions ----------
+# ---------- Admin: upload questions (bulk) ----------
 @app.route('/admin/upload_questions', methods=['POST'])
 @login_required
 def admin_upload_questions():
@@ -299,12 +327,75 @@ def admin_upload_questions():
         db.session.rollback(); flash(f'Upload error: {e}','error')
     return redirect(url_for('index'))
 
-# ----- Question bank (Admin) -----
+# ---------- Admin: manually add a single question ----------
+@app.route('/admin/questions/new', methods=['GET','POST'])
+@login_required
+def admin_new_question():
+    if current_user.role != 'admin':
+        return redirect(url_for('index'))
+    quizzes = Quiz.query.order_by(Quiz.title.asc()).all()
+    subjects = Subject.query.order_by(Subject.name.asc()).all()
+    if request.method == 'POST':
+        quiz_id = request.form.get('quiz_id', type=int)
+        subject_name = request.form.get('subject','').strip()
+        chapter_name = request.form.get('chapter','').strip()
+        text = request.form.get('text','').strip()
+        A = request.form.get('A','').strip()
+        B = request.form.get('B','').strip()
+        C = request.form.get('C','').strip()
+        D = request.form.get('D','').strip()
+        correct = request.form.get('correct','').strip().upper()[:1]
+        if not (quiz_id and text and A and B and C and D and correct in {'A','B','C','D'}):
+            flash('Fill all fields correctly','error')
+            return render_template('admin_new_question.html', quizzes=quizzes, subjects=subjects)
+        subj = get_or_create_subject(subject_name) if subject_name else None
+        chap = get_or_create_chapter(subj, chapter_name) if (subj and chapter_name) else None
+        q = Question(quiz_id=quiz_id, subject_id=subj.id if subj else None, chapter_id=chap.id if chap else None,
+                     text=text, option_a=A, option_b=B, option_c=C, option_d=D, correct_option=correct)
+        db.session.add(q); db.session.commit()
+        flash('Question added','success')
+        return redirect(url_for('admin_new_question'))
+    return render_template('admin_new_question.html', quizzes=quizzes, subjects=subjects)
+
+# ----- Subject/Topic explorer for admin -----
+@app.route('/admin/subjects')
+@login_required
+def admin_subjects():
+    if current_user.role != 'admin':
+        return redirect(url_for('index'))
+    subjects = Subject.query.order_by(Subject.name.asc()).all()
+    return render_template('admin_subjects.html', subjects=subjects)
+
+@app.route('/admin/subject/<int:subject_id>', methods=['GET','POST'])
+@login_required
+def admin_subject_detail(subject_id):
+    if current_user.role != 'admin':
+        return redirect(url_for('index'))
+    subject = db.session.get(Subject, subject_id)
+    if not subject:
+        flash('Subject not found','error'); return redirect(url_for('admin_subjects'))
+    # Add topic (chapter)
+    if request.method == 'POST':
+        chap_name = request.form.get('chapter','').strip()
+        if chap_name:
+            get_or_create_chapter(subject, chap_name)
+            flash('Topic added','success')
+            return redirect(url_for('admin_subject_detail', subject_id=subject_id))
+    chapters = Chapter.query.filter_by(subject_id=subject.id).order_by(Chapter.name.asc()).all()
+    # Filter questions by chapter
+    chapter_id = request.args.get('chapter_id', type=int)
+    q = Question.query.filter_by(subject_id=subject.id)
+    if chapter_id:
+        q = q.filter_by(chapter_id=chapter_id)
+    questions = q.order_by(Question.id.desc()).all()
+    return render_template('admin_subject_detail.html', subject=subject, chapters=chapters, questions=questions, chapter_id=chapter_id)
+
+# ----- Question bank (existing filters) -----
 @app.route('/admin/questions')
 @login_required
 def admin_questions():
     if current_user.role != 'admin':
-        flash('Unauthorized','error'); return redirect(url_for('index'))
+        return redirect(url_for('index'))
     subject_id = request.args.get('subject_id', type=int)
     chapter_id = request.args.get('chapter_id', type=int)
     q = Question.query
@@ -324,7 +415,7 @@ def admin_questions():
 @login_required
 def export_attempts():
     if current_user.role != 'admin':
-        flash('Unauthorized','error'); return redirect(url_for('index'))
+        return redirect(url_for('index'))
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(['attempt_id','user','quiz','score','started_at','submitted_at'])

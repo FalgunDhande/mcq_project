@@ -4,10 +4,10 @@
 <label>Subject <select name="subject_id" onchange="this.form.submit()">
 <option value="">All</option>{% for s in subjects %}<option value="{{ s.id }}" {% if subject_id==s.id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
 </select></label>
-<label>Chapter <select name="chapter_id" onchange="this.form.submit()">
+<label>Topic <select name="chapter_id" onchange="this.form.submit()">
 <option value="">All</option>{% for c in chapters %}<option value="{{ c.id }}" {% if chapter_id==c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
 </select></label></div></form>
 <p><strong>Total:</strong> {{ total }}</p>
-<table><thead><tr><th>ID</th><th>Subject</th><th>Chapter</th><th>Question</th><th>Correct</th></tr></thead>
+<table><thead><tr><th>ID</th><th>Subject</th><th>Topic</th><th>Question</th><th>Correct</th></tr></thead>
 <tbody>{% for q in items %}<tr><td>{{ q.id }}</td><td>{{ q.subject.name if q.subject else '-' }}</td><td>{{ q.chapter.name if q.chapter else '-' }}</td><td>{{ q.text }}</td><td>{{ q.correct_option }}</td></tr>{% endfor %}</tbody></table>
 {% endblock %}

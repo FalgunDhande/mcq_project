@@ -3,8 +3,8 @@
 <h3>Subject-wise Summary</h3>
 <table><thead><tr><th>Subject</th><th>Total</th><th>Correct</th><th>Wrong</th><th>Marks</th></tr></thead>
 <tbody>{% for s,row in per_subject.items() %}<tr><td>{{ s }}</td><td>{{ row.total }}</td><td>{{ row.correct }}</td><td>{{ row.wrong }}</td><td>{{ row.marks }}</td></tr>{% endfor %}</tbody></table>
-<h3>Chapter-wise Summary</h3>
-<table><thead><tr><th>Subject</th><th>Chapter</th><th>Total</th><th>Correct</th><th>Wrong</th><th>Marks</th></tr></thead>
+<h3>Topic-wise Summary</h3>
+<table><thead><tr><th>Subject</th><th>Topic</th><th>Total</th><th>Correct</th><th>Wrong</th><th>Marks</th></tr></thead>
 <tbody>{% for (s,c),row in per_chapter.items() %}<tr><td>{{ s }}</td><td>{{ c }}</td><td>{{ row.total }}</td><td>{{ row.correct }}</td><td>{{ row.wrong }}</td><td>{{ row.marks }}</td></tr>{% endfor %}</tbody></table>
 <h3>All Questions</h3>
 {% for it in items %}<article class="{% if it.selected == it.correct %}ok{% else %}bad{% endif %}"><details open>
