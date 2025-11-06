@@ -13,7 +13,7 @@
           {{ opt }}) {{ label }}
         </label><br>
       {% endfor %}
-      <small class="badge">{{ q.subject.name if q.subject else 'General' }}{% if q.chapter %} • {{ q.chapter.name }}{% endif %}</small>
+      <small class="pill">{{ q.subject.name if q.subject else 'General' }}{% if q.chapter %} • {{ q.chapter.name }}{% endif %}</small>
     </article>
   {% endfor %}
   <button type="submit">Submit</button>

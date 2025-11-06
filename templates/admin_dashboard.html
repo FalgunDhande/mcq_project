@@ -29,7 +29,8 @@
   <div class="grid">
     <label>Title <input name="title" required></label>
     <label>Duration (minutes) <input type="number" name="duration" min="1" value="10" required></label>
-    <label>Negative Marking per wrong (e.g., 0.25) <input name="negative" value="0"></label>
+    <label>Negative Marking (e.g., 0.25) <input name="negative" value="0"></label>
+    <label>Marks per question <input name="marks" value="1"></label>
   </div>
   <button type="submit">Create Quiz</button>
 </form>
@@ -44,7 +45,7 @@
     </label>
     <label>File (CSV / XLSX / PDF) <input type="file" name="file" required></label>
   </div>
-  <small>Optional CSV/XLSX columns: <code>subject, chapter</code></small>
+  <small>Optional columns in CSV/XLSX: <code>subject</code>, <code>chapter</code></small>
   <button type="submit">Upload</button>
 </form>
 

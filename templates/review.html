@@ -1,22 +1,46 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>Review: {{ attempt.quiz.title }}</h2>
-<p><strong>Score:</strong> {{ attempt.score }}</p>
-{% for a in answers %}
-  {% set q = a.question %}
-  <article class="{% if a.is_correct %}ok{% else %}bad{% endif %}">
+<p><strong>Total Score:</strong> {{ attempt.score }}</p>
+
+<h3>Subject-wise Summary</h3>
+<table>
+  <thead><tr><th>Subject</th><th>Total</th><th>Correct</th><th>Wrong</th><th>Marks</th></tr></thead>
+  <tbody>
+    {% for s, row in per_subject.items() %}
+      <tr><td>{{ s }}</td><td>{{ row.total }}</td><td>{{ row.correct }}</td><td>{{ row.wrong }}</td><td>{{ row.marks }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h3>Chapter-wise Summary</h3>
+<table>
+  <thead><tr><th>Subject</th><th>Chapter</th><th>Total</th><th>Correct</th><th>Wrong</th><th>Marks</th></tr></thead>
+  <tbody>
+    {% for (s,c), row in per_chapter.items() %}
+      <tr><td>{{ s }}</td><td>{{ c }}</td><td>{{ row.total }}</td><td>{{ row.correct }}</td><td>{{ row.wrong }}</td><td>{{ row.marks }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h3>All Questions</h3>
+{% for it in items %}
+  <article class="{% if it.selected == it.correct %}ok{% else %}bad{% endif %}">
     <details open>
-      <summary><strong>Q{{ loop.index }}.</strong> {{ q.text }}</summary>
+      <summary><strong>Q{{ loop.index }}.</strong> {{ it.text }}</summary>
       <div style="margin-left:1rem">
-        <p>A) {{ q.option_a }}</p>
-        <p>B) {{ q.option_b }}</p>
-        <p>C) {{ q.option_c }}</p>
-        <p>D) {{ q.option_d }}</p>
-        <p><strong>Your answer:</strong> {{ a.selected_option or '—' }} &nbsp; | &nbsp; <strong>Correct:</strong> {{ q.correct_option }}</p>
-        <small class="badge">{{ q.subject.name if q.subject else 'General' }}{% if q.chapter %} • {{ q.chapter.name }}{% endif %}</small>
+        <p>A) {{ it.A }}</p>
+        <p>B) {{ it.B }}</p>
+        <p>C) {{ it.C }}</p>
+        <p>D) {{ it.D }}</p>
+        <p><strong>Your answer:</strong> {{ it.selected or '—' }}
+           &nbsp; | &nbsp; <strong>Correct:</strong> {{ it.correct }}
+           &nbsp; | &nbsp; <strong>Marks:</strong> {{ it.marks }}</p>
+        <small class="pill">{{ it.subject }}{% if it.chapter %} • {{ it.chapter }}{% endif %}</small>
       </div>
     </details>
   </article>
 {% endfor %}
+
 <p><a href="{{ url_for('index') }}">Back</a></p>
 {% endblock %}

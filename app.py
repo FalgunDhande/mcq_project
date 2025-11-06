@@ -3,20 +3,21 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user, UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
-import os, csv, io
+import os, csv, io, random
 from openpyxl import load_workbook
 from PyPDF2 import PdfReader
-import random
-import pandas as pd
 
 app = Flask(__name__, instance_relative_config=True)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'devsecret')
 os.makedirs(app.instance_path, exist_ok=True)
+
+# Use Postgres on Render if present, else SQLite for local
 db_url = os.environ.get('DATABASE_URL')
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url if db_url else 'sqlite:///' + os.path.join(app.instance_path, 'quiz.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)  # Ephemeral on Render; files are parsed then discarded
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)  # Ephemeral on Render
 
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
@@ -48,6 +49,7 @@ class Quiz(db.Model):
     title = db.Column(db.String(200), nullable=False)
     duration_minutes = db.Column(db.Integer, default=10)
     negative_marking = db.Column(db.Float, default=0.0)  # e.g., 0.25 for -0.25 per wrong
+    marks_per_question = db.Column(db.Float, default=1.0)
     questions = db.relationship('Question', backref='quiz', lazy=True)
 
 class Question(db.Model):
@@ -85,14 +87,15 @@ class AttemptAnswer(db.Model):
     question_id = db.Column(db.Integer, db.ForeignKey('question.id'), nullable=False)
     selected_option = db.Column(db.String(1), nullable=True)
     is_correct = db.Column(db.Boolean, default=False)
+    marks_earned = db.Column(db.Float, default=0.0)
     attempt = db.relationship('Attempt', backref='answers')
     question = db.relationship('Question')
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
 
-# ---- DB init for Flask 3.x
+# ---- DB init (Flask 3 ready) ----
 with app.app_context():
     db.create_all()
     if not User.query.filter_by(username='admin').first():
@@ -139,7 +142,6 @@ def logout():
 @login_required
 def index():
     if current_user.role == 'admin':
-        # Quick stats
         stats = {
             "users": User.query.count(),
             "quizzes": Quiz.query.count(),
@@ -147,14 +149,12 @@ def index():
             "attempts": Attempt.query.count(),
         }
         recent_attempts = Attempt.query.order_by(Attempt.started_at.desc()).limit(10).all()
-        subjects = Subject.query.order_by(Subject.name.asc()).all()
-        return render_template('admin_dashboard.html', stats=stats, recent_attempts=recent_attempts, subjects=subjects, quizzes=Quiz.query.all(), users=User.query.all())
-    # user
+        return render_template('admin_dashboard.html', stats=stats, recent_attempts=recent_attempts, quizzes=Quiz.query.all(), users=User.query.all(), subjects=Subject.query.order_by(Subject.name.asc()).all())
     assignments = Assignment.query.filter_by(user_id=current_user.id).all()
     attempts = Attempt.query.filter_by(user_id=current_user.id).order_by(Attempt.started_at.desc()).all()
     return render_template('user_dashboard.html', assignments=assignments, attempts=attempts)
 
-# ----- Admin management -----
+# ---------- Admin: create user ----------
 @app.route('/admin/create_user', methods=['POST'])
 @login_required
 def admin_create_user():
@@ -172,6 +172,7 @@ def admin_create_user():
     db.session.add(u); db.session.commit()
     flash('User created','success'); return redirect(url_for('index'))
 
+# ---------- Admin: create quiz ----------
 @app.route('/admin/create_quiz', methods=['POST'])
 @login_required
 def admin_create_quiz():
@@ -180,16 +181,20 @@ def admin_create_quiz():
     title = request.form.get('title','').strip()
     duration = request.form.get('duration','10').strip()
     negative = request.form.get('negative','0').strip()
+    marks = request.form.get('marks','1').strip()
     try: duration = int(duration)
     except: duration = 10
     try: negative = float(negative)
     except: negative = 0.0
+    try: marks = float(marks)
+    except: marks = 1.0
     if not title:
         flash('Title required','error'); return redirect(url_for('index'))
-    qz = Quiz(title=title, duration_minutes=duration, negative_marking=negative)
+    qz = Quiz(title=title, duration_minutes=duration, negative_marking=negative, marks_per_question=marks)
     db.session.add(qz); db.session.commit()
     flash('Quiz created','success'); return redirect(url_for('index'))
 
+# ---------- Admin: assign quiz ----------
 @app.route('/admin/assign', methods=['POST'])
 @login_required
 def admin_assign_quiz():
@@ -205,6 +210,7 @@ def admin_assign_quiz():
     db.session.add(a); db.session.commit()
     flash('Assigned successfully','success'); return redirect(url_for('index'))
 
+# ---------- Admin: upload questions ----------
 @app.route('/admin/upload_questions', methods=['POST'])
 @login_required
 def admin_upload_questions():
@@ -213,7 +219,7 @@ def admin_upload_questions():
     qid_raw = request.form.get('quiz_id','').strip()
     if not qid_raw.isdigit():
         flash('Please select a quiz','error'); return redirect(url_for('index'))
-    quiz = Quiz.query.get(int(qid_raw))
+    quiz = db.session.get(Quiz, int(qid_raw))
     if not quiz:
         flash('Quiz not found','error'); return redirect(url_for('index'))
     f = request.files.get('file')
@@ -245,7 +251,7 @@ def admin_upload_questions():
             headers = [c.value.strip().lower() if isinstance(c.value,str) else '' for c in next(sh.iter_rows(min_row=1, max_row=1))]
             idx = {h:i for i,h in enumerate(headers)}
             def gv(row, key):
-                i = idx.get(key)
+                i = idx.get(key); 
                 return (row[i].value if i is not None else None)
             for row in sh.iter_rows(min_row=2):
                 sub = gv(row,'subject'); chapn = gv(row,'chapter')
@@ -287,7 +293,7 @@ def admin_upload_questions():
         db.session.rollback(); flash(f'Upload error: {e}','error')
     return redirect(url_for('index'))
 
-# ----- Question bank filter (Admin) -----
+# ----- Question bank (Admin) -----
 @app.route('/admin/questions')
 @login_required
 def admin_questions():
@@ -303,8 +309,9 @@ def admin_questions():
         chapters = Chapter.query.filter_by(subject_id=subject_id).order_by(Chapter.name.asc()).all()
     if chapter_id:
         q = q.filter_by(chapter_id=chapter_id)
-    items = q.order_by(Question.id.desc()).limit(500).all()
-    return render_template('admin_questions.html', items=items, subjects=subjects, subject_id=subject_id, chapters=chapters, chapter_id=chapter_id)
+    items = q.order_by(Question.id.desc()).limit(1000).all()
+    total = q.count()
+    return render_template('admin_questions.html', items=items, subjects=subjects, subject_id=subject_id, chapters=chapters, chapter_id=chapter_id, total=total)
 
 # ----- Export attempts CSV -----
 @app.route('/admin/export_attempts')
@@ -312,21 +319,24 @@ def admin_questions():
 def export_attempts():
     if current_user.role != 'admin':
         flash('Unauthorized','error'); return redirect(url_for('index'))
-    rows = []
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(['attempt_id','user','quiz','score','started_at','submitted_at'])
     for a in Attempt.query.order_by(Attempt.started_at.desc()).all():
-        rows.append({"attempt_id": a.id, "user": a.user.username, "quiz": a.quiz.title, "score": a.score, "started_at": a.started_at, "submitted_at": a.submitted_at})
-    df = pd.DataFrame(rows)
-    buf = io.StringIO(); df.to_csv(buf, index=False); buf.seek(0)
+        writer.writerow([a.id, a.user.username, a.quiz.title, a.score, a.started_at, a.submitted_at])
+    buf.seek(0)
     return send_file(io.BytesIO(buf.getvalue().encode('utf-8')), mimetype='text/csv', as_attachment=True, download_name='attempts.csv')
 
-# ---------- Start quiz, randomize order ----------
+# ---------- Start quiz ----------
 @app.route('/quiz/<int:quiz_id>/start')
 @login_required
 def start_quiz(quiz_id):
     if current_user.role != 'admin':
         if not Assignment.query.filter_by(user_id=current_user.id, quiz_id=quiz_id).first():
             flash('Quiz not assigned','error'); return redirect(url_for('index'))
-    quiz = Quiz.query.get_or_404(quiz_id)
+    quiz = db.session.get(Quiz, quiz_id)
+    if not quiz:
+        flash('Quiz not found','error'); return redirect(url_for('index'))
     at = Attempt(user_id=current_user.id, quiz_id=quiz.id, started_at=datetime.utcnow())
     db.session.add(at); db.session.commit()
     questions = Question.query.filter_by(quiz_id=quiz.id).all()
@@ -335,15 +345,14 @@ def start_quiz(quiz_id):
     deadline_iso = deadline.isoformat() + 'Z'
     return render_template('take_quiz.html', quiz=quiz, questions=questions, deadline_iso=deadline_iso, attempt_id=at.id)
 
-# ---------- Submit quiz and record answers ----------
+# ---------- Submit quiz ----------
 @app.route('/quiz/<int:quiz_id>/submit', methods=['POST'])
 @login_required
 def submit_quiz(quiz_id):
-    quiz = Quiz.query.get_or_404(quiz_id)
+    quiz = db.session.get(Quiz, quiz_id)
     attempt_id = request.form.get('attempt_id', type=int)
-    at = Attempt.query.get(attempt_id) if attempt_id else None
+    at = db.session.get(Attempt, attempt_id) if attempt_id else None
     if not at or at.user_id != current_user.id or at.submitted_at:
-        # fallback: latest
         at = Attempt.query.filter_by(user_id=current_user.id, quiz_id=quiz.id, submitted_at=None).order_by(Attempt.started_at.desc()).first()
         if not at:
             at = Attempt(user_id=current_user.id, quiz_id=quiz.id, started_at=datetime.utcnow())
@@ -352,13 +361,10 @@ def submit_quiz(quiz_id):
     score = 0.0
     for q in questions:
         sel = request.form.get(f'q_{q.id}', None)
-        correct = (sel is not None and sel.upper()[:1] == q.correct_option)
-        if correct:
-            score += 1
-        else:
-            if sel is not None and quiz.negative_marking > 0:
-                score -= quiz.negative_marking
-        ans = AttemptAnswer(attempt_id=at.id, question_id=q.id, selected_option=(sel.upper()[:1] if sel else None), is_correct=bool(correct))
+        is_correct = sel is not None and sel.upper()[:1] == q.correct_option
+        marks = quiz.marks_per_question if is_correct else (-quiz.negative_marking if sel is not None else 0.0)
+        score += marks
+        ans = AttemptAnswer(attempt_id=at.id, question_id=q.id, selected_option=(sel.upper()[:1] if sel else None), is_correct=is_correct, marks_earned=marks)
         db.session.add(ans)
     at.score = score
     at.submitted_at = datetime.utcnow()
@@ -369,20 +375,44 @@ def submit_quiz(quiz_id):
 @app.route('/attempt/<int:attempt_id>/review')
 @login_required
 def review_attempt(attempt_id):
-    at = Attempt.query.get_or_404(attempt_id)
+    at = db.session.get(Attempt, attempt_id)
+    if not at:
+        flash('Attempt not found','error'); return redirect(url_for('index'))
     if current_user.role != 'admin' and at.user_id != current_user.id:
         flash('Unauthorized','error'); return redirect(url_for('index'))
-    # Pair answers with questions
     answers = AttemptAnswer.query.filter_by(attempt_id=at.id).all()
-    # Ensure order by question id
-    answers.sort(key=lambda a: a.question_id)
-    return render_template('review.html', attempt=at, answers=answers)
+    # Subject & chapter summaries
+    per_subject, per_chapter = {}, {}
+    items = []
+    for a in answers:
+        q = db.session.get(Question, a.question_id)
+        subj = db.session.get(Subject, q.subject_id).name if q.subject_id else 'General'
+        chap = db.session.get(Chapter, q.chapter_id).name if q.chapter_id else '-'
+        # summaries
+        ps = per_subject.setdefault(subj, {"total":0,"correct":0,"wrong":0,"marks":0.0})
+        pc = per_chapter.setdefault((subj, chap), {"total":0,"correct":0,"wrong":0,"marks":0.0})
+        ps["total"] += 1; pc["total"] += 1
+        if a.is_correct:
+            ps["correct"] += 1; pc["correct"] += 1
+        else:
+            if a.selected_option is not None:
+                ps["wrong"] += 1; pc["wrong"] += 1
+        ps["marks"] += a.marks_earned; pc["marks"] += a.marks_earned
+        # item list
+        items.append({
+            "text": q.text, "A": q.option_a, "B": q.option_b, "C": q.option_c, "D": q.option_d,
+            "correct": q.correct_option, "selected": a.selected_option, "marks": a.marks_earned,
+            "subject": subj, "chapter": chap
+        })
+    return render_template('review.html', attempt=at, items=items, per_subject=per_subject, per_chapter=per_chapter)
 
 # ---------- Result page ----------
 @app.route('/result/<int:attempt_id>')
 @login_required
 def show_result(attempt_id):
-    at = Attempt.query.get_or_404(attempt_id)
+    at = db.session.get(Attempt, attempt_id)
+    if not at:
+        flash('Attempt not found','error'); return redirect(url_for('index'))
     if current_user.role != 'admin' and at.user_id != current_user.id:
         flash('Unauthorized','error'); return redirect(url_for('index'))
     return render_template('result.html', attempt=at)
