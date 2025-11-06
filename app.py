@@ -13,6 +13,12 @@ os.makedirs(app.instance_path, exist_ok=True)
 
 # Use Postgres on Render if present, else SQLite for local
 db_url = os.environ.get('DATABASE_URL')
+# Normalize for SQLAlchemy + psycopg3
+if db_url:
+    if db_url.startswith('postgres://'):
+        db_url = db_url.replace('postgres://', 'postgresql+psycopg://', 1)
+    elif db_url.startswith('postgresql://'):
+        db_url = db_url.replace('postgresql://', 'postgresql+psycopg://', 1)
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url if db_url else 'sqlite:///' + os.path.join(app.instance_path, 'quiz.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -95,7 +101,7 @@ class AttemptAnswer(db.Model):
 def load_user(user_id):
     return db.session.get(User, int(user_id))
 
-# ---- DB init (Flask 3 ready) ----
+# ---- DB init (Flask 3) ----
 with app.app_context():
     db.create_all()
     if not User.query.filter_by(username='admin').first():
@@ -381,14 +387,12 @@ def review_attempt(attempt_id):
     if current_user.role != 'admin' and at.user_id != current_user.id:
         flash('Unauthorized','error'); return redirect(url_for('index'))
     answers = AttemptAnswer.query.filter_by(attempt_id=at.id).all()
-    # Subject & chapter summaries
     per_subject, per_chapter = {}, {}
     items = []
     for a in answers:
         q = db.session.get(Question, a.question_id)
         subj = db.session.get(Subject, q.subject_id).name if q.subject_id else 'General'
         chap = db.session.get(Chapter, q.chapter_id).name if q.chapter_id else '-'
-        # summaries
         ps = per_subject.setdefault(subj, {"total":0,"correct":0,"wrong":0,"marks":0.0})
         pc = per_chapter.setdefault((subj, chap), {"total":0,"correct":0,"wrong":0,"marks":0.0})
         ps["total"] += 1; pc["total"] += 1
@@ -398,7 +402,6 @@ def review_attempt(attempt_id):
             if a.selected_option is not None:
                 ps["wrong"] += 1; pc["wrong"] += 1
         ps["marks"] += a.marks_earned; pc["marks"] += a.marks_earned
-        # item list
         items.append({
             "text": q.text, "A": q.option_a, "B": q.option_b, "C": q.option_c, "D": q.option_d,
             "correct": q.correct_option, "selected": a.selected_option, "marks": a.marks_earned,

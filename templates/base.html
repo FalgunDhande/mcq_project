@@ -1,44 +1,18 @@
 <!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ title or "MCQ Quiz" }}</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
-    <style>
-      .cards { display:grid; grid-template-columns: repeat(auto-fit,minmax(200px,1fr)); gap:1rem; }
-      .pill { border:1px solid #ccc; padding:.2rem .6rem; border-radius:999px; font-size:.8rem; }
-      .ok { background:#e8ffe8; }
-      .bad { background:#ffe8e8; }
-    </style>
-  </head>
-  <body>
-    <nav class="container-fluid">
-      <ul><li><strong>MCQ Quiz</strong></li></ul>
-      <ul>
-        {% if current_user.is_authenticated %}
-          {% if current_user.role == 'admin' %}
-            <li><a href="{{ url_for('admin_questions') }}">Question Bank</a></li>
-            <li><a href="{{ url_for('export_attempts') }}">Export Attempts</a></li>
-          {% endif %}
-          <li><a href="/">Dashboard</a></li>
-          <li><a href="{{ url_for('logout') }}">Logout</a></li>
-        {% else %}
-          <li><a href="{{ url_for('login') }}">Login</a></li>
-        {% endif %}
-      </ul>
-    </nav>
-    <main class="container">
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          <article>
-            {% for category, message in messages %}
-              <p><strong>{{ category|title }}:</strong> {{ message }}</p>
-            {% endfor %}
-          </article>
-        {% endif %}
-      {% endwith %}
-      {% block content %}{% endblock %}
-    </main>
-  </body>
-</html>
+<html><head>
+<meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>
+<title>{{ title or 'MCQ Quiz' }}</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+<style>.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem}.pill{border:1px solid #ccc;padding:.2rem .6rem;border-radius:999px;font-size:.8rem}.ok{background:#e8ffe8}.bad{background:#ffe8e8}</style>
+</head><body>
+<nav class="container-fluid"><ul><li><strong>MCQ Quiz</strong></li></ul><ul>
+{% if current_user.is_authenticated %}{% if current_user.role=='admin' %}
+<li><a href="{{ url_for('admin_questions') }}">Question Bank</a></li>
+<li><a href="{{ url_for('export_attempts') }}">Export Attempts</a></li>
+{% endif %}<li><a href="/">Dashboard</a></li><li><a href="{{ url_for('logout') }}">Logout</a></li>
+{% else %}<li><a href="{{ url_for('login') }}">Login</a></li>{% endif %}
+</ul></nav>
+<main class="container">
+{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<article>{% for c,m in messages %}<p><strong>{{ c|title }}:</strong> {{ m }}</p>{% endfor %}</article>{% endif %}{% endwith %}
+{% block content %}{% endblock %}
+</main></body></html>
