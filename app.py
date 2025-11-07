@@ -91,7 +91,7 @@ class Assignment(db.Model):
     quiz = db.relationship('Quiz', backref='assignments')
 
 class Attempt(db.Model):
-    id = db.Column(db.Integer, primary key=True)
+    id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     quiz_id = db.Column(db.Integer, db.ForeignKey('quiz.id'), nullable=False)
     score = db.Column(db.Float, default=0.0)
