@@ -1,7 +1,5 @@
 {% extends "base.html" %}{% block content %}
 <h2>User Dashboard</h2>
-<h3>Messages</h3>
-<ul>{% for m in msgs %}<li><strong>{{ m.created_at.strftime('%Y-%m-%d %H:%M') }}</strong> — {{ m.body }}</li>{% endfor %}</ul>
 <h3>Assigned Quizzes</h3>
 <table><thead><tr><th>Quiz</th><th>Limit</th><th>Action</th></tr></thead>
 <tbody>
@@ -10,6 +8,7 @@
   <td><a href="{{ url_for('start_quiz', quiz_id=a.quiz.id) }}">Start</a></td></tr>
 {% endfor %}
 </tbody></table>
+
 <h3>Your Attempts</h3>
 <table><thead><tr><th>Quiz</th><th>Score</th><th>Started</th><th>Submitted</th><th>Review</th><th>PDF</th></tr></thead>
 <tbody>{% for at in attempts %}<tr><td>{{ at.quiz.title }}</td><td>{{ at.score }}</td><td>{{ at.started_at }}</td><td>{{ at.submitted_at }}</td>

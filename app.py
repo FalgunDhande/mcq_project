@@ -13,10 +13,17 @@ app = Flask(__name__, instance_relative_config=True)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'devsecret')
 os.makedirs(app.instance_path, exist_ok=True)
 
-# Prefer existing SQLite (old DB) unless DATABASE_URL is set
+# --------- DB config: Render Postgres (psycopg3) or fallback to SQLite ---------
 db_url = os.environ.get('DATABASE_URL')
-if not db_url:
+if db_url:
+    # Render gives postgres://... -> use SQLAlchemy psycopg v3
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql+psycopg://", 1)
+    elif db_url.startswith("postgresql://") and "+psycopg" not in db_url:
+        db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
+else:
     db_url = 'sqlite:///' + os.path.join(app.instance_path, 'quiz.db')
+
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -33,7 +40,7 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(200), nullable=False)
     role = db.Column(db.String(20), default='user')
-    # new fields (auto-migrated for old DBs)
+    # gamification
     coins = db.Column(db.Integer, default=0)
     badges = db.Column(db.String(200), default='')
     streak = db.Column(db.Integer, default=0)
@@ -48,7 +55,7 @@ class Chapter(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     subject_id = db.Column(db.Integer, db.ForeignKey('subject.id'), nullable=False)
     name = db.Column(db.String(120), nullable=False)
-    subject = db.relationship('Subject', backref='chapters')
+    subject = db.relationship('Subject', backref='chapors')
 
 class Quiz(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -128,52 +135,36 @@ def auto_migrate_user_table():
     insp = inspect(db.engine)
     cols = {c['name'] for c in insp.get_columns('user')}
     stmts = []
-    # sqlite uses plain 'user', postgres needs "user"
     tbl = 'user'
-    if 'coins' not in cols:
-        stmts.append(f"ALTER TABLE {tbl} ADD COLUMN coins INTEGER DEFAULT 0")
-    if 'badges' not in cols:
-        stmts.append(f"ALTER TABLE {tbl} ADD COLUMN badges VARCHAR(200) DEFAULT ''")
-    if 'streak' not in cols:
-        stmts.append(f"ALTER TABLE {tbl} ADD COLUMN streak INTEGER DEFAULT 0")
+    if 'coins' not in cols: stmts.append(f"ALTER TABLE {tbl} ADD COLUMN coins INTEGER DEFAULT 0")
+    if 'badges' not in cols: stmts.append(f"ALTER TABLE {tbl} ADD COLUMN badges VARCHAR(200) DEFAULT ''")
+    if 'streak' not in cols: stmts.append(f"ALTER TABLE {tbl} ADD COLUMN streak INTEGER DEFAULT 0")
     for s in stmts:
-        try:
-            db.session.execute(text(s))
-        except Exception as e:
-            # if table is quoted (postgres), retry with quotes
-            qs = s.replace('ALTER TABLE user', 'ALTER TABLE \"user\"')
-            try:
-                db.session.execute(text(qs))
-            except Exception:
-                pass
-    if stmts:
-        db.session.commit()
+        try: db.session.execute(text(s))
+        except Exception: db.session.execute(text(s.replace('ALTER TABLE user','ALTER TABLE \"user\"')))
+    if stmts: db.session.commit()
 
 with app.app_context():
     db.create_all()
-    # make sure old DBs get new columns
     auto_migrate_user_table()
     if not User.query.filter_by(username='admin').first():
-        admin = User(username='admin', role='admin')
-        admin.set_password('admin123')
+        admin = User(username='admin', role='admin'); admin.set_password('admin123')
         db.session.add(admin); db.session.commit()
 
-# ---------- helpers ----------
+# -------------- helpers --------------
 def get_or_create_subject(name):
     if not name: return None
     s = Subject.query.filter(db.func.lower(Subject.name)==name.lower()).first()
-    if not s:
-        s = Subject(name=name); db.session.add(s); db.session.commit()
+    if not s: s = Subject(name=name); db.session.add(s); db.session.commit()
     return s
 
 def get_or_create_chapter(subject, name):
     if not name or not subject: return None
     c = Chapter.query.filter(db.func.lower(Chapter.name)==name.lower(), Chapter.subject_id==subject.id).first()
-    if not c:
-        c = Chapter(name=name, subject_id=subject.id); db.session.add(c); db.session.commit()
+    if not c: c = Chapter(name=name, subject_id=subject.id); db.session.add(c); db.session.commit()
     return c
 
-# ---------- auth ----------
+# -------------- auth --------------
 @app.route('/login', methods=['GET','POST'])
 def login():
     if request.method == 'POST':
@@ -188,7 +179,7 @@ def login():
 def logout():
     logout_user(); return redirect(url_for('login'))
 
-# ---------- dashboards ----------
+# -------------- dashboards --------------
 @app.route('/')
 @login_required
 def index():
@@ -207,34 +198,24 @@ def index():
     attempts = Attempt.query.filter_by(user_id=current_user.id).order_by(Attempt.started_at.desc()).all()
     msgs = Message.query.filter_by(to_user_id=current_user.id).order_by(Message.created_at.desc()).limit(20).all()
     return render_template('user_dashboard.html', assignments=assignments, attempts=attempts, msgs=msgs)
+
+# -------------- Add User --------------
 @app.route('/admin/add_user', methods=['POST'])
 @login_required
 def admin_add_user():
-    if current_user.role not in ('admin', 'teacher'):
+    if current_user.role not in ('admin','teacher'):
         return redirect(url_for('index'))
-
-    username = request.form.get('username', '').strip()
-    password = request.form.get('password', '').strip()
-    role = request.form.get('role', 'user')
-
+    username = request.form.get('username','').strip()
+    password = request.form.get('password','').strip()
+    role = request.form.get('role','user')
     if not username or not password:
-        flash("Username & password required", "error")
-        return redirect(url_for('index'))
-
+        flash('Username & password required', 'error'); return redirect(url_for('index'))
     if User.query.filter_by(username=username).first():
-        flash("User already exists", "error")
-        return redirect(url_for('index'))
+        flash('User already exists', 'error'); return redirect(url_for('index'))
+    u = User(username=username, role=role); u.set_password(password); db.session.add(u); db.session.commit()
+    flash('User created', 'success'); return redirect(url_for('index'))
 
-    new_user = User(username=username, role=role)
-    new_user.set_password(password)
-    db.session.add(new_user)
-    db.session.commit()
-
-    flash("User created successfully ✅", "success")
-    return redirect(url_for('index'))
-
-
-# ---------- quiz management ----------
+# -------------- Create Quiz --------------
 @app.route('/admin/create_quiz', methods=['POST'])
 @login_required
 def admin_create_quiz():
@@ -250,19 +231,21 @@ def admin_create_quiz():
     db.session.add(qz); db.session.commit()
     flash('Quiz created','success'); return redirect(url_for('index'))
 
+# -------------- Delete Quiz (cascade) --------------
 @app.route('/admin/quiz/delete/<int:quiz_id>', methods=['POST'])
 @login_required
 def admin_delete_quiz(quiz_id):
     if current_user.role not in ('admin','teacher'): return redirect(url_for('index'))
     quiz = db.session.get(Quiz, quiz_id)
     if not quiz: flash('Quiz not found','error'); return redirect(url_for('index'))
-    Assignment.query.filter_by(quiz_id=quiz_id).delete(synchronize_session=False)
-    AttemptAnswer.query.filter(AttemptAnswer.attempt_id.in_(db.session.query(Attempt.id).filter_by(quiz_id=quiz_id))).delete(synchronize_session=False)
-    Attempt.query.filter_by(quiz_id=quiz_id).delete(synchronize_session=False)
+    # cascade deletes answers/attempts and questions
+    db.session.query(AttemptAnswer).filter(AttemptAnswer.attempt_id.in_(db.session.query(Attempt.id).filter_by(quiz_id=quiz_id))).delete(synchronize_session=False)
+    db.session.query(Attempt).filter_by(quiz_id=quiz_id).delete(synchronize_session=False)
+    db.session.query(Assignment).filter_by(quiz_id=quiz_id).delete(synchronize_session=False)
     db.session.delete(quiz); db.session.commit()
     flash('Quiz deleted','success'); return redirect(url_for('index'))
 
-# ---------- upload questions ----------
+# -------------- Upload Questions (CSV/XLSX) --------------
 def add_question_row(quiz, row):
     subj = get_or_create_subject((row.get('subject') or '').strip()) if row.get('subject') else None
     chap = get_or_create_chapter(subj, (row.get('chapter') or '').strip()) if (subj and row.get('chapter')) else None
@@ -314,7 +297,7 @@ def admin_upload_questions():
         db.session.rollback(); flash(f'Upload error: {e}','error')
     return redirect(url_for('index'))
 
-# ---------- blueprint ----------
+# -------------- Blueprints (Random Quiz) --------------
 @app.route('/admin/blueprint/new', methods=['POST'])
 @login_required
 def create_blueprint():
@@ -344,15 +327,14 @@ def generate_from_blueprint(bp_id):
             if chap: q = q.filter_by(chapter_id=chap.id)
         if rule.get('difficulty'):
             q = q.filter_by(difficulty=rule['difficulty'].title())
-        pool = q.all()
-        random.shuffle(pool)
+        pool = q.all(); random.shuffle(pool)
         for item in pool[:int(rule.get('count',0))]:
             clone = Question(quiz_id=quiz.id, text=item.text, option_a=item.option_a, option_b=item.option_b, option_c=item.option_c, option_d=item.option_d,
                              correct_option=item.correct_option, difficulty=item.difficulty, qtype=item.qtype, subject_id=item.subject_id, chapter_id=item.chapter_id)
             db.session.add(clone); total += 1
     db.session.commit(); flash(f'Generated quiz with {total} questions','success'); return redirect(url_for('index'))
 
-# ---------- assign / roles / messaging ----------
+# -------------- Assign Quiz --------------
 @app.route('/admin/assign', methods=['POST'])
 @login_required
 def assign_quiz():
@@ -369,28 +351,7 @@ def assign_quiz():
             db.session.add(Assignment(user_id=uid, quiz_id=quiz_id, attempts_limit=limit, cooldown_days=cooldown))
     db.session.commit(); flash(f'Assigned to {len(ids)} users','success'); return redirect(url_for('index'))
 
-@app.route('/admin/change_role', methods=['POST'])
-@login_required
-def change_role():
-    if current_user.role != 'admin': return redirect(url_for('index'))
-    uid = request.form.get('user_id', type=int); role = request.form.get('role','user')
-    u = db.session.get(User, uid); 
-    if u: u.role = role; db.session.commit(); flash('Role updated','success')
-    return redirect(url_for('index'))
-
-@app.route('/admin/message', methods=['POST'])
-@login_required
-def admin_message():
-    if current_user.role not in ('admin','teacher','moderator'): return redirect(url_for('index'))
-    to_id = request.form.get('to_user_id', type=int)
-    body = request.form.get('body','').strip()
-    if to_id and body:
-        m = Message(to_user_id=to_id, from_user_id=current_user.id, body=body); db.session.add(m); db.session.commit(); flash('Message sent','success')
-    else:
-        flash('Select user and type message','error')
-    return redirect(url_for('index'))
-
-# ---------- take / autosave / submit ----------
+# -------------- Start / Autosave / Submit --------------
 @app.route('/quiz/<int:quiz_id>/start')
 @login_required
 def start_quiz(quiz_id):
@@ -455,7 +416,7 @@ def submit_quiz(quiz_id):
     db.session.commit()
     return redirect(url_for('review_attempt', attempt_id=at.id))
 
-# ---------- review & report ----------
+# -------------- Review / PDF / Exports --------------
 @app.route('/attempt/<int:attempt_id>/review')
 @login_required
 def review_attempt(attempt_id):
@@ -499,7 +460,6 @@ def report_pdf(attempt_id):
     c.showPage(); c.save(); buf.seek(0)
     return send_file(buf, mimetype='application/pdf', as_attachment=True, download_name='report.pdf')
 
-# ---------- exports ----------
 @app.route('/admin/export/questions.csv')
 @login_required
 def export_questions():
