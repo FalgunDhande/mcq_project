@@ -1,21 +1,24 @@
 <!doctype html>
 <html><head>
-<meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>
-<title>{{ title or 'MCQ Quiz' }}</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title or 'MCQ Ultra' }}</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
-<style>.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem}.pill{border:1px solid #ccc;padding:.2rem .6rem;border-radius:999px;font-size:.8rem}.ok{background:#e8ffe8}.bad{background:#ffe8e8}</style>
-</head><body>
-<nav class="container-fluid"><ul><li><strong>MCQ Quiz</strong></li></ul><ul>
-{% if current_user.is_authenticated %}{% if current_user.role=='admin' %}
-<li><a href="{{ url_for('admin_users') }}">Users</a></li>
-<li><a href="{{ url_for('admin_questions') }}">Question Bank</a></li>
-<li><a href="{{ url_for('admin_new_question') }}">Add MCQ</a></li>
-<li><a href="{{ url_for('admin_subjects') }}">Subjects/Topics</a></li>
-<li><a href="{{ url_for('export_attempts') }}">Export Attempts</a></li>
-{% endif %}<li><a href="/">Dashboard</a></li><li><a href="{{ url_for('logout') }}">Logout</a></li>
-{% else %}<li><a href="{{ url_for('login') }}">Login</a></li>{% endif %}
+<style>.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem}.pill{border:1px solid #ccc;border-radius:999px;padding:.2rem .6rem;font-size:.8rem}.ok{background:#e8ffe8}.bad{background:#ffe8e8}</style>
+</head>
+<body>
+<nav class="container-fluid"><ul><li><strong>MCQ Ultra</strong></li></ul><ul>
+{% if current_user.is_authenticated %}
+  {% if current_user.role in ['admin','teacher','moderator'] %}
+    <li><a href="/">Dashboard</a></li>
+    <li><a href="{{ url_for('export_questions') }}">Export Q</a></li>
+    <li><a href="{{ url_for('export_attempts') }}">Export Attempts</a></li>
+  {% endif %}
+  <li><a href="{{ url_for('logout') }}">Logout</a></li>
+{% endif %}
 </ul></nav>
 <main class="container">
-{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<article>{% for c,m in messages %}<p><strong>{{ c|title }}:</strong> {{ m }}</p>{% endfor %}</article>{% endif %}{% endwith %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}<article>{% for c,m in messages %}<p><strong>{{ c|title }}:</strong> {{ m }}</p>{% endfor %}</article>{% endif %}
+{% endwith %}
 {% block content %}{% endblock %}
 </main></body></html>

@@ -1,15 +1,25 @@
 {% extends "base.html" %}{% block content %}
-<h2>Review: {{ attempt.quiz.title }}</h2><p><strong>Total Score:</strong> {{ attempt.score }}</p>
-<h3>Subject-wise Summary</h3>
+<h2>Review: {{ attempt.quiz.title }}</h2>
+<p><strong>Total Score:</strong> {{ attempt.score }}</p>
+<h3>Subject-wise</h3>
 <table><thead><tr><th>Subject</th><th>Total</th><th>Correct</th><th>Wrong</th><th>Marks</th></tr></thead>
 <tbody>{% for s,row in per_subject.items() %}<tr><td>{{ s }}</td><td>{{ row.total }}</td><td>{{ row.correct }}</td><td>{{ row.wrong }}</td><td>{{ row.marks }}</td></tr>{% endfor %}</tbody></table>
-<h3>Topic-wise Summary</h3>
+<h3>Topic-wise</h3>
 <table><thead><tr><th>Subject</th><th>Topic</th><th>Total</th><th>Correct</th><th>Wrong</th><th>Marks</th></tr></thead>
 <tbody>{% for (s,c),row in per_chapter.items() %}<tr><td>{{ s }}</td><td>{{ c }}</td><td>{{ row.total }}</td><td>{{ row.correct }}</td><td>{{ row.wrong }}</td><td>{{ row.marks }}</td></tr>{% endfor %}</tbody></table>
 <h3>All Questions</h3>
-{% for it in items %}<article class="{% if it.selected == it.correct %}ok{% else %}bad{% endif %}"><details open>
-<summary><strong>Q{{ loop.index }}.</strong> {{ it.text }}</summary>
-<div style="margin-left:1rem"><p>A) {{ it.A }}</p><p>B) {{ it.B }}</p><p>C) {{ it.C }}</p><p>D) {{ it.D }}</p>
-<p><strong>Your answer:</strong> {{ it.selected or '—' }} &nbsp; | &nbsp; <strong>Correct:</strong> {{ it.correct }} &nbsp; | &nbsp; <strong>Marks:</strong> {{ it.marks }}</p>
-<small class="pill">{{ it.subject }}{% if it.chapter %} • {{ it.chapter }}{% endif %}</small></div></details></article>{% endfor %}
-<p><a href="{{ url_for('index') }}">Back</a></p>{% endblock %}
+{% for it in items %}
+  <article class="{% if it.a.selected_option == it.q.correct_option %}ok{% else %}bad{% endif %}">
+    <details open>
+      <summary><strong>Q{{ loop.index }}.</strong> {{ it.q.text }}</summary>
+      <div style="margin-left:1rem">
+        <p>A) {{ it.q.option_a }}</p><p>B) {{ it.q.option_b }}</p><p>C) {{ it.q.option_c }}</p><p>D) {{ it.q.option_d }}</p>
+        <p><strong>Your:</strong> {{ it.a.selected_option or '—' }} | <strong>Correct:</strong> {{ it.q.correct_option }} | <strong>Marks:</strong> {{ it.a.marks_earned }}</p>
+        {% if it.a.flagged %}<p>🚩 Flagged</p>{% endif %}
+        {% if it.a.note %}<p>📝 Note: {{ it.a.note }}</p>{% endif %}
+      </div>
+    </details>
+  </article>
+{% endfor %}
+<p><a href="/">Back</a></p>
+{% endblock %}

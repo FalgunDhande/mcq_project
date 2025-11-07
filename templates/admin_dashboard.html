@@ -1,33 +1,110 @@
 {% extends "base.html" %}{% block content %}
-<h2>Admin Dashboard</h2>
-<div class="cards"><article><header>Users</header><h3>{{ stats.users }}</h3></article>
-<article><header>Quizzes</header><h3>{{ stats.quizzes }}</h3></article>
-<article><header>Questions</header><h3>{{ stats.questions }}</h3></article>
-<article><header>Attempts</header><h3>{{ stats.attempts }}</h3></article></div>
-
-<h3>Create User</h3>
-<form method="post" action="{{ url_for('admin_create_user') }}">
-<div class="grid"><label>Username <input name="username" required></label>
-<label>Password <input type="password" name="password" required></label>
-<label>Role <select name="role"><option value="user">User</option><option value="admin">Admin</option></select></label></div>
-<button type="submit">Create</button></form>
+<h2>Admin/Teacher Dashboard</h2>
+<div class="cards">
+  <article><header>Users</header><h3>{{ stats.users }}</h3></article>
+  <article><header>Quizzes</header><h3>{{ stats.quizzes }}</h3></article>
+  <article><header>Questions</header><h3>{{ stats.questions }}</h3></article>
+  <article><header>Attempts</header><h3>{{ stats.attempts }}</h3></article>
+</div>
 
 <h3>Create Quiz</h3>
 <form method="post" action="{{ url_for('admin_create_quiz') }}">
-<div class="grid"><label>Title <input name="title" required></label>
-<label>Duration (minutes) <input type="number" name="duration" min="1" value="10" required></label>
-<label>Negative Marking <input name="negative" value="0"></label>
-<label>Marks per question <input name="marks" value="1"></label></div>
-<button type="submit">Create Quiz</button></form>
+<div class="grid">
+  <label>Title <input name="title" required></label>
+  <label>Duration <input type="number" name="duration" value="10"></label>
+  <label>Marks/Q <input type="number" step="0.5" name="marks" value="1"></label>
+  <label>Negative <input type="number" step="0.25" name="negative" value="0"></label>
+  <label>Start (UTC ISO) <input name="start_time" placeholder="YYYY-MM-DDTHH:MM:SS"></label>
+  <label>End (UTC ISO) <input name="end_time" placeholder="YYYY-MM-DDTHH:MM:SS"></label>
+</div>
+<button type="submit">Create</button></form>
 
-<h3>Upload Questions (Bulk)</h3>
+<h3>Upload Questions (CSV/XLSX) to Quiz</h3>
 <form method="post" enctype="multipart/form-data" action="{{ url_for('admin_upload_questions') }}">
-<div class="grid"><label>Quiz <select name="quiz_id" required>{% for q in quizzes %}<option value="{{ q.id }}">{{ q.title }}</option>{% endfor %}</select></label>
-<label>File (CSV / XLSX / PDF) <input type="file" name="file" required></label></div>
-<small>Optional columns: <code>subject, chapter</code></small>
-<button type="submit">Upload</button></form>
+<div class="grid">
+  <label>Quiz <select name="quiz_id">{% for q in quizzes %}<option value="{{ q.id }}">{{ q.title }}</option>{% endfor %}</select></label>
+  <label>File <input type="file" name="file" required></label>
+</div>
+<button type="submit">Upload</button>
+</form>
 
-<h3>Recent Attempts</h3>
-<table><thead><tr><th>User</th><th>Quiz</th><th>Score</th><th>When</th></tr></thead>
-<tbody>{% for a in recent_attempts %}<tr><td>{{ a.user.username }}</td><td>{{ a.quiz.title }}</td><td>{{ a.score }}</td><td>{{ a.submitted_at or a.started_at }}</td></tr>{% endfor %}</tbody></table>
+<h3>Assign Quiz</h3>
+<form method="post" action="{{ url_for('assign_quiz') }}">
+<div class="grid">
+  <label>Quiz <select name="quiz_id">{% for q in quizzes %}<option value="{{ q.id }}">{{ q.title }}</option>{% endfor %}</select></label>
+  <label>Attempt limit <input type="number" name="limit" value="1" min="1"></label>
+  <label>Cooldown days <input type="number" name="cooldown" value="0" min="0"></label>
+</div>
+<p><strong>Select Users</strong></p>
+<div class="grid">{% for u in users %}<label><input type="checkbox" name="user_ids" value="{{ u.id }}"> {{ u.username }} ({{ u.role }})</label>{% endfor %}</div>
+<button type="submit">Assign</button>
+</form>
+<h3>Add User</h3>
+<form method="post" action="{{ url_for('admin_add_user') }}">
+  <div class="grid">
+    <label>Username
+      <input name="username" required>
+    </label>
+
+    <label>Password
+      <input name="password" type="password" required>
+    </label>
+
+    <label>Role
+      <select name="role">
+        <option value="user">User</option>
+        <option value="moderator">Moderator</option>
+        <option value="teacher">Teacher</option>
+        <option value="admin">Admin</option>
+      </select>
+    </label>
+  </div>
+  <button type="submit">Add User</button>
+</form>
+
+<h3>Change Role</h3>
+<form method="post" action="{{ url_for('change_role') }}">
+<div class="grid">
+  <label>User <select name="user_id">{% for u in users %}<option value="{{ u.id }}">{{ u.username }}</option>{% endfor %}</select></label>
+  <label>Role <select name="role"><option>user</option><option>moderator</option><option>teacher</option><option>admin</option></select></label>
+</div>
+<button type="submit">Update Role</button>
+</form>
+
+<h3>Leaderboard (Total score)</h3>
+<table><thead><tr><th>User</th><th>Total Score</th></tr></thead>
+<tbody>{% for name,total in leaderboard %}<tr><td>{{ name }}</td><td>{{ total or 0 }}</td></tr>{% endfor %}</tbody></table>
+
+<h3>Active Attempts (Live)</h3>
+<table><thead><tr><th>User</th><th>Quiz</th><th>Started</th><th>Action</th></tr></thead>
+<tbody>
+{% for a in active %}
+<tr><td>{{ a.user.username }}</td><td>{{ a.quiz.title }}</td><td>{{ a.started_at }}</td>
+<td>
+  <form method="post" action="{{ url_for('admin_delete_quiz', quiz_id=a.quiz_id) }}" onsubmit="return confirm('Force close by deleting quiz?');">
+    <button type="submit">Force Close (Del Quiz)</button>
+  </form>
+</td>
+</tr>
+{% endfor %}
+</tbody></table>
+
+<h3>Quiz List (Delete)</h3>
+<table><thead><tr><th>Title</th><th>Questions</th><th>Delete</th></tr></thead>
+<tbody>{% for q in quizzes %}
+<tr><td>{{ q.title }}</td><td>{{ q.questions|length }}</td>
+<td><form method="post" action="{{ url_for('admin_delete_quiz', quiz_id=q.id) }}" onsubmit="return confirm('Delete quiz?');"><button type="submit">Delete</button></form></td></tr>
+{% endfor %}</tbody></table>
+
+<h3>Blueprints</h3>
+<form method="post" action="{{ url_for('create_blueprint') }}">
+<label>Name <input name="name" required></label>
+<label>Rules JSON <textarea name="rules" placeholder='{"rules":[{"subject":"SQL","chapter":"Joins","count":5,"difficulty":"Easy"}]}'></textarea></label>
+<button type="submit">Save Blueprint</button>
+</form>
+{% if blueprints %}
+<table><thead><tr><th>Name</th><th>Generate</th></tr></thead>
+<tbody>{% for b in blueprints %}<tr><td>{{ b.name }}</td>
+<td><form method="post" action="{{ url_for('generate_from_blueprint', bp_id=b.id) }}"><button type="submit">Generate Quiz</button></form></td></tr>{% endfor %}</tbody></table>
+{% endif %}
 {% endblock %}
