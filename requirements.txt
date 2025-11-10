@@ -1,9 +1,0 @@
-Flask==3.0.0
-Flask-Login==0.6.3
-Flask-SQLAlchemy==3.1.1
-Werkzeug==3.0.1
-PyPDF2==3.0.1
-openpyxl==3.1.2
-reportlab==4.2.5
-psycopg[binary]==3.2.3
-gunicorn==21.2.0
